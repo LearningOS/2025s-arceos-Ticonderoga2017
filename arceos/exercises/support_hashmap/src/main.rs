@@ -5,7 +5,8 @@
 #[cfg(feature = "axstd")]
 extern crate axstd as std;
 
-use std::collections::HashMap;
+// use std::collections::HashMap;
+use axhashmap::AxHashMap;
 
 #[cfg_attr(feature = "axstd", no_mangle)]
 fn main() {
@@ -16,7 +17,8 @@ fn main() {
 
 fn test_hashmap() {
     const N: u32 = 50_000;
-    let mut m = HashMap::new();
+    // let mut m = HashMap::new();
+    let mut m = AxHashMap::new();
     for value in 0..N {
         let key = format!("key_{value}");
         m.insert(key, value);

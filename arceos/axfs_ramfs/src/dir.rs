@@ -6,6 +6,7 @@ use axfs_vfs::{VfsDirEntry, VfsNodeAttr, VfsNodeOps, VfsNodeRef, VfsNodeType};
 use axfs_vfs::{VfsError, VfsResult};
 use spin::RwLock;
 
+use crate::alloc::vec;
 use crate::file::FileNode;
 
 /// The directory node in the RAM filesystem.
@@ -163,6 +164,50 @@ impl VfsNodeOps for DirNode {
         } else {
             self.remove_node(name)
         }
+    }
+
+    fn rename(&self, src_path: &str, dst_path: &str) -> VfsResult {
+        let (_, dst_rest) = split_path(dst_path);
+        if dst_rest.is_none() {
+            return Err(VfsError::InvalidInput);
+        }
+
+        let dst_path = dst_rest.unwrap();
+
+        // Get the source node  
+        let src_node = self
+            .this
+            .upgrade()
+            .ok_or(VfsError::NotFound)?
+            .lookup(src_path)?;  
+        
+        // Get the source node's attributes  
+        let src_attr = src_node.get_attr()?;  
+        
+        // Create a new node with the destination path and same type as source  
+        self.create(dst_path, src_attr.file_type())?;          
+        
+        // Get the destination node  
+        let dst_node = self
+            .this
+            .upgrade()
+            .ok_or(VfsError::NotFound)?
+            .lookup(dst_path)?;  
+        
+        // If it's a file, copy the content  
+        if src_attr.is_file() {  
+            // Read the source file content  
+            let mut buf = vec![0u8; src_attr.size() as usize];  
+            src_node.read_at(0, &mut buf)?;  
+            
+            // Write to the destination file  
+            dst_node.truncate(0)?;  
+            dst_node.write_at(0, &buf)?;  
+        }          
+        // Remove the source node  
+        self.remove(src_path)?;  
+
+        Ok(())
     }
 
     axfs_vfs::impl_vfs_dir_default! {}

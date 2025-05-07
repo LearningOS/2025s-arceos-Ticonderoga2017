@@ -2,12 +2,13 @@
 
 use core::ffi::{c_void, c_char, c_int};
 use axhal::arch::TrapFrame;
-use axhal::trap::{register_trap_handler, SYSCALL};
+use axhal::trap::{register_trap_handler, SYSCALL, PAGE_FAULT};
 use axerrno::LinuxError;
 use axtask::current;
 use axtask::TaskExtRef;
 use axhal::paging::MappingFlags;
 use arceos_posix_api as api;
+use memory_addr::VirtAddr;
 
 const SYS_IOCTL: usize = 29;
 const SYS_OPENAT: usize = 56;
@@ -131,6 +132,18 @@ fn handle_syscall(tf: &TrapFrame, syscall_num: usize) -> isize {
     ret
 }
 
+#[register_trap_handler(PAGE_FAULT)] 
+fn handle_page_fault(vaddr: VirtAddr, access_flags: MappingFlags, is_user: bool) -> bool {
+    if is_user {
+        axlog::warn!("now step in handle user page fault!, address:{}", vaddr.as_usize());
+        let cur = current();
+        let mut aspace = cur.task_ext().aspace.lock();
+        aspace.handle_page_fault(vaddr, access_flags)
+    } else {
+        false
+    }
+}
+
 #[allow(unused_variables)]
 fn sys_mmap(
     addr: *mut usize,
@@ -140,7 +153,43 @@ fn sys_mmap(
     fd: i32,
     _offset: isize,
 ) -> isize {
-    unimplemented!("no sys_mmap!");
+    syscall_body!(sys_mmap, {
+        if length == 0 {
+            return Err(LinuxError::EINVAL);
+        }
+
+        let prot_flags = MmapProt::from_bits_truncate(prot);
+        let mapping_flags = MappingFlags::from(prot_flags);
+
+        let mmap_flags = MmapFlags::from_bits_truncate(flags);
+        let is_anonymous = mmap_flags.contains(MmapFlags::MAP_ANONYMOUS) || fd == -1;
+
+        if !is_anonymous && fd < 0 {
+            return Err(LinuxError::EBADF);
+        }
+
+        use memory_addr::PAGE_SIZE_4K;
+        let aligned_len = (length + PAGE_SIZE_4K - 1) & !(PAGE_SIZE_4K - 1);        
+
+        let cur = current();
+        let mut address_space = cur.task_ext().aspace.lock();
+
+        use memory_addr::VirtAddr;
+        let hint_addr = if addr.is_null() || !mmap_flags.contains(MmapFlags::MAP_FIXED) {
+            match address_space.find_free_area(
+                VirtAddr::from(addr as usize), 
+                aligned_len, 
+                address_space.range()) {
+                Some(addr) => addr,
+                None => return Err(LinuxError::ENOMEM),  
+            }
+        } else {
+            VirtAddr::from(addr as usize)  
+        };
+
+        address_space.map_alloc(hint_addr, aligned_len, mapping_flags, false)?;
+        Ok(hint_addr.as_usize())
+    })
 }
 
 fn sys_openat(dfd: c_int, fname: *const c_char, flags: c_int, mode: api::ctypes::mode_t) -> isize {

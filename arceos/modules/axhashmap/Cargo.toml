@@ -1,0 +1,9 @@
+[package]  
+name = "axhashmap"  
+version = "0.1.0"  
+edition = "2021"  
+  
+[dependencies]  
+axhal = { workspace = true }
+axstd = { workspace = true, features = ["alloc"] }
+axalloc = { workspace = true }

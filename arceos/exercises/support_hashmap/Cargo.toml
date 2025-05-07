@@ -5,3 +5,7 @@ edition = "2021"
 
 [dependencies]
 axstd = { workspace = true, features = ["alloc"], optional = true }
+axhashmap = { workspace = true }
+
+#[features]
+#default = ["axstd"]
