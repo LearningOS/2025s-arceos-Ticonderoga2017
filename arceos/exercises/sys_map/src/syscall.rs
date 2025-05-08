@@ -8,7 +8,7 @@ use axtask::current;
 use axtask::TaskExtRef;
 use axhal::paging::MappingFlags;
 use arceos_posix_api as api;
-use memory_addr::VirtAddr;
+use memory_addr::{VirtAddr, VirtAddrRange};
 
 const SYS_IOCTL: usize = 29;
 const SYS_OPENAT: usize = 56;
@@ -176,10 +176,11 @@ fn sys_mmap(
 
         use memory_addr::VirtAddr;
         let hint_addr = if addr.is_null() || !mmap_flags.contains(MmapFlags::MAP_FIXED) {
+            let va_range = VirtAddrRange::from_start_size(address_space.base(), address_space.size());
             match address_space.find_free_area(
                 VirtAddr::from(addr as usize), 
                 aligned_len, 
-                address_space.range()) {
+                va_range) {
                 Some(addr) => addr,
                 None => return Err(LinuxError::ENOMEM),  
             }
