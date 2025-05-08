@@ -87,6 +87,9 @@ fn vmexit_handler(ctx: &mut VmCpuRegisters) -> bool {
             if let Some(msg) = sbi_msg {
                 match msg {
                     SbiMessage::Reset(_) => {
+                        ctx.guest_regs.gprs.set_reg(A0, 0x6688);
+                        ctx.guest_regs.gprs.set_reg(A1, 0x1234);
+
                         let a0 = ctx.guest_regs.gprs.reg(A0);
                         let a1 = ctx.guest_regs.gprs.reg(A1);
                         ax_println!("a0 = {:#x}, a1 = {:#x}", a0, a1);
@@ -142,5 +145,9 @@ fn prepare_guest_context(ctx: &mut VmCpuRegisters) {
     sstatus.set_spp(sstatus::SPP::Supervisor);
     ctx.guest_regs.sstatus = sstatus.bits();
     // Return to entry to start vm.
-    ctx.guest_regs.sepc = VM_ENTRY;
+    // ctx.guest_regs.sepc = VM_ENTRY;
+
+    ctx.guest_regs.sepc = VM_ENTRY + 8;
+    ctx.guest_regs.gprs.set_reg(A1, 0);
+    ctx.guest_regs.gprs.set_reg(A0, 0);
 }
