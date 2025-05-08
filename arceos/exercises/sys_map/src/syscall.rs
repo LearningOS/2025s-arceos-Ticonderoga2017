@@ -7,8 +7,9 @@ use axerrno::LinuxError;
 use axtask::current;
 use axtask::TaskExtRef;
 use axhal::paging::MappingFlags;
-use arceos_posix_api as api;
+use arceos_posix_api::{self as api, get_file_like};
 use memory_addr::{VirtAddr, VirtAddrRange};
+use alloc::vec;
 
 const SYS_IOCTL: usize = 29;
 const SYS_OPENAT: usize = 56;
@@ -135,7 +136,6 @@ fn handle_syscall(tf: &TrapFrame, syscall_num: usize) -> isize {
 #[register_trap_handler(PAGE_FAULT)] 
 fn handle_page_fault(vaddr: VirtAddr, access_flags: MappingFlags, is_user: bool) -> bool {
     if is_user {
-        axlog::warn!("now step in handle user page fault!, address:{}", vaddr.as_usize());
         let cur = current();
         let mut aspace = cur.task_ext().aspace.lock();
         aspace.handle_page_fault(vaddr, access_flags)
@@ -188,7 +188,15 @@ fn sys_mmap(
             VirtAddr::from(addr as usize)  
         };
 
-        address_space.map_alloc(hint_addr, aligned_len, mapping_flags, false)?;
+        address_space.map_alloc(hint_addr, aligned_len, mapping_flags, true)?;
+
+        if !is_anonymous && _offset >= 0 {
+            let file = get_file_like(fd)?;
+            let mut buf = vec![0u8; length];
+            let read_size = file.read(&mut buf)?;
+            address_space.write(hint_addr, &buf[0..read_size])?;
+        }
+
         Ok(hint_addr.as_usize())
     })
 }
